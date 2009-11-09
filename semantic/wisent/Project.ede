@@ -18,12 +18,12 @@
    (semantic-ede-proj-target-grammar "wy"
     :name "wy"
     :path ""
-    :source '("wisent-java-tags.wy" "wisent-awk.wy" "wisent-calc.wy" "wisent-cim.wy" "wisent-java.wy" "wisent-python.wy" "wisent-javascript-jv.wy")
+    :source '("wisent-java-tags.wy" "wisent-awk.wy" "wisent-calc.wy" "wisent-cim.wy" "wisent-java.wy" "wisent-python.wy" "wisent-javascript-jv.wy" "wisent-haxe.wy")
     )
    (ede-proj-target-elisp "languages"
     :name "languages"
     :path ""
-    :source '("wisent-calc.el" "wisent-java.el" "wisent-java-tags.el" "wisent-python.el" "wisent-javascript.el")
+    :source '("wisent-calc.el" "wisent-java.el" "wisent-java-tags.el" "wisent-python.el" "wisent-javascript.el" "wisent-haxe.el")
     )
    )
   :configuration-variables 'nil
