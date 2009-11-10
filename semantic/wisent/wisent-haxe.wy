@@ -37,7 +37,8 @@
 %start compilation_unit
 ;; Other Goals
 %start class_member_declaration
-%start FormalParameterList
+%start interface_member_declaration
+%start formal_parameter_item
 
 ;; with the terminals stuff, I used the javacript.y names,
 ;; but the wisent-java-tags.wy types
@@ -91,6 +92,7 @@
 %token <punctuation> LINE_TERMINATOR "\n"
 %token <punctuation> SEMICOLON ";"
 %token <punctuation> ONES_COMPLIMENT "~"
+%token <punctuation> QUESTION "?"
 
 
 ;; -----------------------------
@@ -130,6 +132,11 @@
 %put     CLASS summary
 "Class declaration: class <name>"
 
+%keyword INTERFACE    "interface"
+%put     INTERFACE summary
+"Interface declaration: interface <name>"
+
+
 %keyword IMPLEMENTS   "implements"
 %put     IMPLEMENTS summary
 "Class SuperInterfaces declaration: implements <name> [, ...]"
@@ -150,6 +157,9 @@
 %put     STATIC summary
 "Declaration modifier: static {class|interface|<type>} <name> ..."
 
+%keyword INLINE       "inline"
+%put     INLINE summary
+"Declaration modifier: inline {method} <name> ..."
 
 
 %keyword IF           "if"
@@ -293,7 +303,7 @@ type_declaration
   : SEMICOLON
     ()
   | class_declaration
- ;; | interface_declaration
+  | interface_declaration
   ;
 
 ;;; MISC
@@ -310,7 +320,7 @@ qualified_name
   | IDENTIFIER
   ;
 
-preprocessor_element : SHARP IF Expression
+preprocessor_element : SHARP IF PrimaryExpression
                      | SHARP ELSE
                      | SHARP END
                      ;
@@ -320,20 +330,24 @@ preprocessor_element : SHARP IF Expression
 ;;; Type Declaration token
 ;; ("NAME" type "TYPE" ( PART-LIST ) ( PARENTS ) EXTRA-SPEC "DOCSTRING")
 class_declaration
-  : modifiers_opt CLASS qualified_name superc_opt interfaces_opt class_body
-    (TYPE-TAG $3 $2 $6 (if (or $4 $5) (cons $4 $5)) :typemodifiers $1)
+  : modifiers_opt CLASS qualified_name type_args_opt parent_list class_body
+    (TYPE-TAG $3 $2 $6 $5 :typemodifiers $1 :template-specifier $4)
   ;
 
-superc_opt
+interface_declaration
+  : modifiers_opt INTERFACE qualified_name type_args_opt parent_list interface_body
+    (TYPE-TAG $3 $2 $6 $5 :typemodifiers $1 :template-specifier $4)
+  ;
+
+parent_list
   : ;;EMPTY
+    nil
   | EXTENDS qualified_name
-    (identity $2)
-  ;
-
-interfaces_opt
-  : ;;EMPTY
-  | IMPLEMENTS qualified_name_list
-    (nreverse $2)
+    (cons $2 nil)
+  | IMPLEMENTS qualified_name
+    (cons nil (list $2))
+  | parent_list COMMA IMPLEMENTS qualified_name
+    (cons (car $1) (cons $4 (cdr $1)))
   ;
 
 modifiers_opt
@@ -353,11 +367,17 @@ modifier
   : STATIC
   | PRIVATE
   | PUBLIC
+  | INLINE
   ;
 
 class_body
   : BRACE_BLOCK
     (EXPANDFULL $1 class_member_declaration)
+  ;
+
+interface_body
+  : BRACE_BLOCK
+    (EXPANDFULL $1 interface_member_declaration)
   ;
 
 class_member_declaration
@@ -368,17 +388,36 @@ class_member_declaration
   | constructor_declaration
   | method_declaration
   | field_declaration
+  | preprocessor_element
   ;
 
-field_declaration : modifiers_opt VAR IDENTIFIER COLON type_specifier SEMICOLON
-                    (VARIABLE-TAG $3 $5 nil :typemodifiers $1)
+interface_member_declaration
+  : LBRACE
+    ()
+  | RBRACE
+    ()
+  | interface_method_declaration
+  | field_declaration
+  | preprocessor_element
+  ;
+
+field_declaration : modifiers_opt VAR IDENTIFIER property_def_opt COLON type_specifier initializer_opt SEMICOLON
+                    (VARIABLE-TAG $3 $6 $7 :typemodifiers $1 :property-spec $4)
                   ;
 
-method_declaration : modifiers_opt FUNCTION IDENTIFIER FormalParameterListBlock type_specifier_opt Block
-                     (FUNCTION-TAG $3 $5 $4 :typemodifiers $1)
+property_def_opt : ;; EMPTY
+                 | PAREN_BLOCK
+                 ;
+
+method_declaration : modifiers_opt FUNCTION IDENTIFIER type_args_opt formal_parameter_list_block type_specifier_opt Block
+                     (FUNCTION-TAG $3 $6 $5 :typemodifiers $1 :template-specifier $4)
                    ;
 
-constructor_declaration : modifiers_opt FUNCTION NEW FormalParameterListBlock type_specifier_opt Block
+interface_method_declaration : modifiers_opt FUNCTION IDENTIFIER type_args_opt formal_parameter_list_block type_specifier_opt SEMICOLON
+                     (FUNCTION-TAG $3 $6 $5 :typemodifiers $1 :template-specifier $4)
+                   ;
+
+constructor_declaration : modifiers_opt FUNCTION NEW formal_parameter_list_block type_specifier_opt Block
                           (FUNCTION-TAG $3 $5 $4 :typemodifiers $1 :constructor-flag t)
                         ;
 
@@ -409,19 +448,27 @@ type_args_opt : ;; EMPTY
 
 ;;; CODE
 
-FormalParameterListBlock : PAREN_BLOCK
-			   (EXPANDFULL $1 FormalParameterList)
-			;
+formal_parameter_list_block : PAREN_BLOCK
+                              (EXPANDFULL $1 formal_parameter_item)
+                            ;
 
-FormalParameterList: OPEN_PARENTHESIS
-		     ()
-		   | IDENTIFIER type_specifier_opt
-		     (VARIABLE-TAG $1 $2 nil)
-		   | CLOSE_PARENTHESIS
-		     ()
-		   | COMMA
-		     ()
-		   ;
+formal_parameter_item: OPEN_PARENTHESIS
+                       ()
+                     | IDENTIFIER type_specifier_opt
+                       (VARIABLE-TAG $1 $2 nil)
+                     | QUESTION IDENTIFIER type_specifier_opt initializer_opt
+                       (VARIABLE-TAG $2 $3 (or $4 "null"))
+                     | CLOSE_PARENTHESIS
+                       ()
+                     | COMMA
+                       ()
+                     | preprocessor_element
+                     ;
+
+initializer_opt : ;; EMPTY
+                | ASSIGN_SYMBOL AssignmentExpression
+                  (identity $2)
+                ;
 
 StatementList : Statement
               | StatementList Statement
@@ -515,6 +562,8 @@ PrimaryExpression : THIS
                   | NULL_TOKEN
                   | TRUE
                   | FALSE
+                  | BRACK_BLOCK
+                  | OPEN_SQ_BRACKETS Expression CLOSE_SQ_BRACKETS
                   | OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS
                   ;
 

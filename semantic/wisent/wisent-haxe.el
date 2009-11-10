@@ -81,6 +81,11 @@ This function overrides `get-local-variables'."
 ;;
 ;; This sets up the haxe parser
 
+(defun reparse-haxe ()
+  (interactive)
+  (wisent-haxe-setup-parser)
+  (senator-force-refresh))
+
 ;;;###autoload
 (defun wisent-haxe-setup-parser ()
   "Setup buffer for parse."
@@ -93,9 +98,23 @@ This function overrides `get-local-variables'."
    ;; Parsing
    semantic-tag-expand-function 'wisent-haxe-expand-tag
    ;; Environment
-   semantic-imenu-summary-function 'semantic-format-tag-name
+   semantic-imenu-summary-function 'semantic-format-tag-prototype
    imenu-create-index-function 'semantic-create-imenu-index
+   semantic-type-relation-separator-character '(".")
    semantic-command-separation-character ";"
+   ;; speedbar and imenu buckets name
+   semantic-symbol->name-assoc-list-for-type-parts
+   ;; in type parts
+   '((type     . "Classes")
+     (variable . "Variables")
+     (function . "Methods"))
+   semantic-symbol->name-assoc-list
+   ;; everywhere
+   (append semantic-symbol->name-assoc-list-for-type-parts
+           '((include  . "Imports")
+             (package  . "Package")))
+   ;; navigation inside 'type children
+   senator-step-at-tag-classes '(function variable)
    ))
 
 ;;;###autoload
