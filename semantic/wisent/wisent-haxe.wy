@@ -61,9 +61,9 @@
 %token <punctuation> BITWISE_OR_EQUALS        "|="
 %token <punctuation> BITWISE_SHIFT_LEFT       "<<"
 %token <punctuation> BITWISE_SHIFT_LEFT_EQUALS "<<="
-%token <punctuation> BITWISE_SHIFT_RIGHT      ">>"
+;;%token <punctuation> BITWISE_SHIFT_RIGHT      ">>"
 %token <punctuation> BITWISE_SHIFT_RIGHT_EQUALS ">>="
-%token <punctuation> BITWISE_SHIFT_RIGHT_ZERO_FILL ">>>"
+;;%token <punctuation> BITWISE_SHIFT_RIGHT_ZERO_FILL ">>>"
 %token <punctuation> BITWISE_SHIFT_RIGHT_ZERO_FILL_EQUALS ">>>="
 %token <punctuation> NOT_EQUAL "!="
 %token <punctuation> DIV_EQUALS "/="
@@ -264,6 +264,9 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; associativity and stuff
+%right ARROW
+%left GREATER_THAN LESS_THAN
+%left BITWISE_SHIFT_LEFT
 %left PLUS MINUS
 %left MULTIPLY DIV MOD
 
@@ -625,13 +628,13 @@ AdditiveExpression : MultiplicativeExpression
 
 ShiftExpression : AdditiveExpression
                 | ShiftExpression BITWISE_SHIFT_LEFT AdditiveExpression
-                | ShiftExpression BITWISE_SHIFT_RIGHT AdditiveExpression
-                | ShiftExpression BITWISE_SHIFT_RIGHT_ZERO_FILL  AdditiveExpression
                 ;
 
 RelationalExpression : ShiftExpression
                      | RelationalExpression LESS_THAN ShiftExpression
                      | RelationalExpression GREATER_THAN ShiftExpression
+                     | RelationalExpression GREATER_THAN GREATER_THAN ShiftExpression
+                     | RelationalExpression GREATER_THAN GREATER_THAN GREATER_THAN ShiftExpression
                      | RelationalExpression LS_EQUAL ShiftExpression
                      | RelationalExpression GT_EQUAL ShiftExpression
                      ;
