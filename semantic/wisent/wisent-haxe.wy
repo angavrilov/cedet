@@ -124,6 +124,10 @@
 %put     IMPORT summary
 "Import package declarations: import <package>"
 
+%keyword USING        "using"
+%put     USING summary
+"Load a method mixin package: using <class>"
+
 %keyword PACKAGE      "package"
 %put     PACKAGE summary
 "Package declaration: package <name>"
@@ -160,6 +164,14 @@
 %keyword INLINE       "inline"
 %put     INLINE summary
 "Declaration modifier: inline {method} <name> ..."
+
+%keyword OVERRIDE     "override"
+%put     OVERRIDE summary
+"Declaration modifier: override {method} <name> ..."
+
+%keyword DYNAMIC      "dynamic"
+%put     DYNAMIC summary
+"Declaration modifier: dynamic {method} <name> ..."
 
 
 %keyword IF           "if"
@@ -298,6 +310,8 @@ package_declaration
 import_declaration
   : IMPORT qualified_name SEMICOLON
     (INCLUDE-TAG $2 nil)
+  | USING qualified_name SEMICOLON
+    (INCLUDE-TAG $2 nil :using-mixin t)
   | IMPORT qualified_name DOT MULTIPLY SEMICOLON
     (INCLUDE-TAG (concat $2 $3 $4) nil)
   ;
@@ -371,6 +385,8 @@ modifier
   | PRIVATE
   | PUBLIC
   | INLINE
+  | OVERRIDE
+  | DYNAMIC
   ;
 
 class_body
@@ -406,6 +422,8 @@ interface_member_declaration
 
 field_declaration : modifiers_opt VAR IDENTIFIER property_def_opt COLON type_specifier initializer_opt SEMICOLON
                     (VARIABLE-TAG $3 $6 $7 :typemodifiers $1 :property-spec $4)
+                  | modifiers_opt VAR IDENTIFIER property_def_opt initializer SEMICOLON
+                    (VARIABLE-TAG $3 nil $5 :typemodifiers $1 :property-spec $4)
                   ;
 
 property_def_opt : ;; EMPTY
@@ -469,9 +487,12 @@ formal_parameter_item: OPEN_PARENTHESIS
                      ;
 
 initializer_opt : ;; EMPTY
-                | ASSIGN_SYMBOL AssignmentExpression
-                  (identity $2)
+                | initializer
                 ;
+
+initializer : ASSIGN_SYMBOL AssignmentExpression
+	      (identity $2)
+            ;
 
 StatementList : Statement
               | StatementList Statement
@@ -510,13 +531,9 @@ VariableDeclarationList : VariableDeclaration
 
 VariableDeclaration : IDENTIFIER
 		      (append (list $1 nil) $region)
-                    | IDENTIFIER Initializer
-		      (append (cons $1 $2) $region)
+                    | IDENTIFIER initializer
+		      (append (list $1 $2) $region)
                     ;
-
-Initializer : ASSIGN_SYMBOL AssignmentExpression
-	      (list $2)
-            ;
 
 EmptyStatement : SEMICOLON
                ;
@@ -536,7 +553,7 @@ IterationExpression : WHILE OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS Statem
                     | FOR OPEN_PARENTHESIS OptionalExpression SEMICOLON OptionalExpression SEMICOLON OptionalExpression CLOSE_PARENTHESIS Statement
                     | FOR OPEN_PARENTHESIS VAR VariableDeclarationList SEMICOLON OptionalExpression SEMICOLON OptionalExpression CLOSE_PARENTHESIS Statement
                     | FOR OPEN_PARENTHESIS LeftHandSideExpression IN Expression CLOSE_PARENTHESIS Statement
-                    | FOR OPEN_PARENTHESIS VAR IDENTIFIER OptionalInitializer IN Expression CLOSE_PARENTHESIS Statement
+                    | FOR OPEN_PARENTHESIS VAR IDENTIFIER initializer_opt IN Expression CLOSE_PARENTHESIS Statement
                     ;
 
 ContinueStatement : CONTINUE SEMICOLON
@@ -553,10 +570,6 @@ ReturnStatement : RETURN Expression SEMICOLON
 
 WithStatement : WITH OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS   Statement
               ;
-
-OptionalInitializer : Initializer
-                    |
-                    ;
 
 PrimaryExpression : THIS
                   | IDENTIFIER
