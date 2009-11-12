@@ -39,6 +39,8 @@
 %start class_member_declaration
 %start interface_member_declaration
 %start formal_parameter_item
+%start array_ref_item
+%start comma_expressions_item
 
 ;; with the terminals stuff, I used the javacript.y names,
 ;; but the wisent-java-tags.wy types
@@ -88,6 +90,7 @@
 %token <punctuation> COLON ":"
 %token <punctuation> COMMA ","
 %token <punctuation> DOT "."
+%token <punctuation> RANGE_ITERATOR "..."
 %token <punctuation> LESS_THAN "<"
 %token <punctuation> LINE_TERMINATOR "\n"
 %token <punctuation> SEMICOLON ";"
@@ -208,6 +211,13 @@
 %put THIS summary
 "this"
 
+%keyword TRUE         "true"
+%put TRUE summary
+"true"
+
+%keyword FALSE        "false"
+%put FALSE summary
+"false"
 
 %keyword RETURN       "return"
 %put     RETURN summary
@@ -264,10 +274,6 @@
 %token <number>      NUMBER
 
 
-%token FALSE
-%token TRUE
-%token QUERY
-
 
 %token NULL_TOKEN
 
@@ -277,10 +283,20 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; associativity and stuff
 %right ARROW
-%left GREATER_THAN LESS_THAN
-%left BITWISE_SHIFT_LEFT
+
+%right ASSIGN_SYMBOL
+%right QUESTION
+%left LOGICAL_OR
+%left LOGICAL_AND
+%nonassoc RANGE_ITERATOR
+%left EQUALS NOT_EQUAL
+%left GREATER_THAN LESS_THAN LS_EQUAL GT_EQUAL
+%left BITWISE_EXCLUSIVE_OR BITWISE_OR
+%left BITWISE_AND
+%left BITWISE_SHIFT_LEFT ;; BITWISE_SHIFT_RIGHT
 %left PLUS MINUS
-%left MULTIPLY DIV MOD
+%left MULTIPLY DIV
+%left MOD
 
 %nonassoc FALSE
 %nonassoc HIGHER_THAN_FALSE
@@ -337,7 +353,8 @@ qualified_name
   | IDENTIFIER
   ;
 
-preprocessor_element : SHARP IF PrimaryExpression
+preprocessor_element : SHARP IF IDENTIFIER
+                     | SHARP IF PAREN_BLOCK
                      | SHARP ELSE
                      | SHARP END
                      ;
@@ -490,7 +507,7 @@ initializer_opt : ;; EMPTY
                 | initializer
                 ;
 
-initializer : ASSIGN_SYMBOL AssignmentExpression
+initializer : ASSIGN_SYMBOL one_expression
 	      (identity $2)
             ;
 
@@ -544,15 +561,15 @@ ExpressionStatement : Expression SEMICOLON
 IfStatement : IF OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS Statement  %prec HIGHER_THAN_FALSE
             | IF OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS Statement ELSE Statement
             | IF OPEN_PARENTHESIS FALSE CLOSE_PARENTHESIS Statement
-            | IF OPEN_PARENTHESIS LeftHandSideExpression AssignmentOperator AssignmentExpression CLOSE_PARENTHESIS Statement
+            | IF OPEN_PARENTHESIS reference_expression AssignmentOperator one_expression CLOSE_PARENTHESIS Statement
             ;
 
 IterationExpression : WHILE OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS Statement %prec HIGHER_THAN_FALSE
                     | WHILE OPEN_PARENTHESIS FALSE CLOSE_PARENTHESIS Statement
-                    | WHILE OPEN_PARENTHESIS LeftHandSideExpression AssignmentOperator AssignmentExpression CLOSE_PARENTHESIS Statement
+                    | WHILE OPEN_PARENTHESIS reference_expression AssignmentOperator one_expression CLOSE_PARENTHESIS Statement
                     | FOR OPEN_PARENTHESIS OptionalExpression SEMICOLON OptionalExpression SEMICOLON OptionalExpression CLOSE_PARENTHESIS Statement
                     | FOR OPEN_PARENTHESIS VAR VariableDeclarationList SEMICOLON OptionalExpression SEMICOLON OptionalExpression CLOSE_PARENTHESIS Statement
-                    | FOR OPEN_PARENTHESIS LeftHandSideExpression IN Expression CLOSE_PARENTHESIS Statement
+                    | FOR OPEN_PARENTHESIS reference_expression IN Expression CLOSE_PARENTHESIS Statement
                     | FOR OPEN_PARENTHESIS VAR IDENTIFIER initializer_opt IN Expression CLOSE_PARENTHESIS Statement
                     ;
 
@@ -571,119 +588,79 @@ ReturnStatement : RETURN Expression SEMICOLON
 WithStatement : WITH OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS   Statement
               ;
 
-PrimaryExpression : THIS
-                  | IDENTIFIER
-                  | NUMBER
+actual_argument_list : PAREN_BLOCK
+                       ( EXPANDFULL $1 comma_expressions_item )
+                     ;
+
+array_ref_op : BRACK_BLOCK
+               ( EXPANDFULL $1 array_ref_item )
+             ;
+
+array_ref_item: OPEN_SQ_BRACKETS one_expression CLOSE_SQ_BRACKETS
+              ;
+
+reference_expression : THIS
+                     | IDENTIFIER
+                     | atomic_expression DOT IDENTIFIER
+                     ;
+
+atomic_expression : NUMBER
                   | STRING
                   | NULL_TOKEN
                   | TRUE
                   | FALSE
+                  | PAREN_BLOCK
+                    ( EXPANDFULL $1 comma_expressions_item )
                   | BRACK_BLOCK
-                  | OPEN_SQ_BRACKETS Expression CLOSE_SQ_BRACKETS
-                  | OPEN_PARENTHESIS Expression CLOSE_PARENTHESIS
+                    ( EXPANDFULL $1 comma_expressions_item )
+                  | BRACE_BLOCK
+                  | reference_expression
+                  | NEW qualified_name type_args_opt actual_argument_list
+                  | atomic_expression actual_argument_list
+                  | atomic_expression array_ref_op
                   ;
 
-MemberExpression : PrimaryExpression
-                 | MemberExpression OPEN_SQ_BRACKETS Expression  CLOSE_SQ_BRACKETS
-                 | MemberExpression DOT IDENTIFIER
-                 | NEW MemberExpression Arguments
-                 ;
-
-NewExpression : MemberExpression
-              | NEW NewExpression
-              ;
-
-CallExpression : MemberExpression Arguments
-               | CallExpression Arguments
-               | CallExpression OPEN_SQ_BRACKETS Expression  CLOSE_SQ_BRACKETS
-               | CallExpression DOT IDENTIFIER
-               ;
-
-Arguments : OPEN_PARENTHESIS CLOSE_PARENTHESIS
-          | OPEN_PARENTHESIS ArgumentList CLOSE_PARENTHESIS
-          ;
-
-ArgumentList : AssignmentExpression
-             | ArgumentList COMMA AssignmentExpression
-             ;
-
-LeftHandSideExpression : NewExpression
-                       | CallExpression
-                       ;
-
-PostfixExpression : LeftHandSideExpression
-                  | LeftHandSideExpression INCREMENT
-                  | LeftHandSideExpression DECREMENT
-                  ;
-
-UnaryExpression : PostfixExpression
-                | DELETE UnaryExpression
-                | VOID_SYMBOL UnaryExpression
-                | TYPEOF UnaryExpression
-                | INCREMENT UnaryExpression
-                | DECREMENT UnaryExpression
-                | PLUS UnaryExpression
-                | MINUS UnaryExpression
-                | ONES_COMPLIMENT UnaryExpression
-                | LOGICAL_NOT UnaryExpression
-                ;
-
-MultiplicativeExpression : UnaryExpression
-                         | MultiplicativeExpression MULTIPLY UnaryExpression
-                         | MultiplicativeExpression DIV UnaryExpression
-                         | MultiplicativeExpression MOD UnaryExpression
-                         ;
-
-AdditiveExpression : MultiplicativeExpression
-                   | AdditiveExpression PLUS MultiplicativeExpression
-                   | AdditiveExpression MINUS MultiplicativeExpression
-                   ;
-
-ShiftExpression : AdditiveExpression
-                | ShiftExpression BITWISE_SHIFT_LEFT AdditiveExpression
-                ;
-
-RelationalExpression : ShiftExpression
-                     | RelationalExpression LESS_THAN ShiftExpression
-                     | RelationalExpression GREATER_THAN ShiftExpression
-                     | RelationalExpression GREATER_THAN GREATER_THAN ShiftExpression
-                     | RelationalExpression GREATER_THAN GREATER_THAN GREATER_THAN ShiftExpression
-                     | RelationalExpression LS_EQUAL ShiftExpression
-                     | RelationalExpression GT_EQUAL ShiftExpression
-                     ;
-
-EqualityExpression : RelationalExpression
-                   | EqualityExpression EQUALS RelationalExpression
-                   | EqualityExpression NOT_EQUAL RelationalExpression
-                   ;
-
-BitwiseANDExpression : EqualityExpression
-                     | BitwiseANDExpression BITWISE_AND EqualityExpression
-                     ;
-
-BitwiseXORExpression : BitwiseANDExpression
-                     | BitwiseXORExpression BITWISE_EXCLUSIVE_OR     BitwiseANDExpression
-                     ;
-
-BitwiseORExpression : BitwiseXORExpression
-                    | BitwiseORExpression BITWISE_OR BitwiseXORExpression
-                    ;
-
-LogicalANDExpression : BitwiseORExpression
-                     | LogicalANDExpression LOGICAL_AND BitwiseORExpression
-                     ;
-
-LogicalORExpression : LogicalANDExpression
-                    | LogicalORExpression LOGICAL_OR LogicalANDExpression
-                    ;
-
-ConditionalExpression : LogicalORExpression
-                      | LogicalORExpression QUERY AssignmentExpression COLON    AssignmentExpression
+post_unary_expression : atomic_expression
+                      | post_unary_expression INCREMENT
+                      | post_unary_expression DECREMENT
                       ;
 
-AssignmentExpression : ConditionalExpression
-                     | LeftHandSideExpression AssignmentOperator  AssignmentExpression %prec LOWER_THAN_CLOSE_PARENTHESIS
-                     ;
+unary_expression : post_unary_expression
+                 | DELETE unary_expression
+                 | VOID_SYMBOL unary_expression
+                 | TYPEOF unary_expression
+                 | INCREMENT unary_expression
+                 | DECREMENT unary_expression
+                 | PLUS unary_expression
+                 | MINUS unary_expression
+                 | ONES_COMPLIMENT unary_expression
+                 | LOGICAL_NOT unary_expression
+                 ;
+
+one_expression : unary_expression
+               | one_expression MULTIPLY one_expression
+               | one_expression DIV one_expression
+               | one_expression MOD one_expression
+               | one_expression PLUS one_expression
+               | one_expression MINUS one_expression
+               | one_expression BITWISE_SHIFT_LEFT one_expression
+              ;; | one_expression BITWISE_SHIFT_RIGHT one_expression
+               | one_expression LESS_THAN one_expression
+               | one_expression GREATER_THAN one_expression
+               | one_expression GREATER_THAN GREATER_THAN one_expression
+               | one_expression GREATER_THAN GREATER_THAN GREATER_THAN one_expression
+               | one_expression LS_EQUAL one_expression
+               | one_expression GT_EQUAL one_expression
+               | one_expression EQUALS one_expression
+               | one_expression NOT_EQUAL one_expression
+               | one_expression BITWISE_AND one_expression
+               | one_expression BITWISE_EXCLUSIVE_OR one_expression
+               | one_expression BITWISE_OR one_expression
+               | one_expression LOGICAL_AND one_expression
+               | one_expression LOGICAL_OR one_expression
+               | one_expression QUESTION one_expression COLON one_expression %prec QUESTION
+               | reference_expression AssignmentOperator one_expression %prec ASSIGN_SYMBOL
+               ;
 
 AssignmentOperator : ASSIGN_SYMBOL
                    | MULTIPLY_EQUALS
@@ -699,9 +676,23 @@ AssignmentOperator : ASSIGN_SYMBOL
                    | BITWISE_OR_EQUALS
                    ;
 
-Expression : AssignmentExpression
-           | Expression COMMA AssignmentExpression
+Expression : one_expression
+           | Expression COMMA one_expression
            ;
+
+comma_expressions_item: OPEN_PARENTHESIS
+                        ()
+                      | OPEN_SQ_BRACKETS
+                        ()
+                      | one_expression
+                      | CLOSE_SQ_BRACKETS
+                        ()
+                      | CLOSE_PARENTHESIS
+                        ()
+                      | COMMA
+                        ()
+                      ;
+
 
 OptionalExpression : Expression
                    |
