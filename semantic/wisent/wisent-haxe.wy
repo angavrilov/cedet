@@ -38,6 +38,7 @@
 ;; Other Goals
 %start class_member_declaration
 %start interface_member_declaration
+%start typedef_member_declaration
 %start formal_parameter_item
 %start array_ref_item
 %start comma_expressions_item
@@ -134,6 +135,10 @@
 %keyword PACKAGE      "package"
 %put     PACKAGE summary
 "Package declaration: package <name>"
+
+%keyword TYPEDEF      "typedef"
+%put     TYPEDEF summary
+"Type declaration: typedef <name>"
 
 %keyword CLASS        "class"
 %put     CLASS summary
@@ -337,6 +342,7 @@ type_declaration
     ()
   | class_declaration
   | interface_declaration
+  | typedef_declaration
   ;
 
 ;;; MISC
@@ -371,6 +377,13 @@ class_declaration
 interface_declaration
   : modifiers_opt INTERFACE qualified_name type_args_opt parent_list interface_body
     (TYPE-TAG $3 $2 $6 $5 :typemodifiers $1 :template-specifier $4)
+  ;
+
+typedef_declaration
+  : TYPEDEF IDENTIFIER type_args_opt ASSIGN_SYMBOL typedef_body
+    (TYPE-TAG $2 $1 $5 nil :template-specifier $3)
+  | TYPEDEF IDENTIFIER type_args_opt ASSIGN_SYMBOL type_specifier_base
+    (TYPE-TAG $2 $1 nil (cons $5 nil) :template-specifier $3)
   ;
 
 parent_list
@@ -416,6 +429,11 @@ interface_body
     (EXPANDFULL $1 interface_member_declaration)
   ;
 
+typedef_body
+  : BRACE_BLOCK
+    (EXPANDFULL $1 typedef_member_declaration)
+  ;
+
 class_member_declaration
   : LBRACE
     ()
@@ -437,11 +455,28 @@ interface_member_declaration
   | preprocessor_element
   ;
 
+typedef_member_declaration
+  : LBRACE
+    ()
+  | RBRACE
+    ()
+  | COMMA
+    ()
+  | interface_method_declaration
+  | field_declaration
+  | anon_field_declaration
+  | preprocessor_element
+  ;
+
 field_declaration : modifiers_opt VAR IDENTIFIER property_def_opt COLON type_specifier initializer_opt SEMICOLON
                     (VARIABLE-TAG $3 $6 $7 :typemodifiers $1 :property-spec $4)
                   | modifiers_opt VAR IDENTIFIER property_def_opt initializer SEMICOLON
                     (VARIABLE-TAG $3 nil $5 :typemodifiers $1 :property-spec $4)
                   ;
+
+anon_field_declaration : IDENTIFIER COLON type_specifier
+                         (VARIABLE-TAG $1 $3 nil)
+                       ;
 
 property_def_opt : ;; EMPTY
                  | PAREN_BLOCK
@@ -472,10 +507,17 @@ type_specifier_opt : ;; EMPTY
                      (identity $2)
                    ;
 
-type_specifier : qualified_name type_args_opt
-                 (concat $1 $2)
-               | type_specifier ARROW type_specifier
-                 (concat $1 $2 $3)
+type_specifier_base : qualified_name type_args_opt
+                      (concat $1 $2)
+                    | type_specifier ARROW type_specifier
+                      (concat $1 $2 $3)
+                    | PAREN_BLOCK
+                      (replace-regexp-in-string "\\(\\s \\|\n\\)+" "" $1)
+                    ;
+
+type_specifier : type_specifier_base
+               | BRACE_BLOCK
+                 (replace-regexp-in-string "\\(\\s \\|\n\\)+" "" $1)
                ;
 
 type_args_opt : ;; EMPTY
